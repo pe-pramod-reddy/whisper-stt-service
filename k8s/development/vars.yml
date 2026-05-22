@@ -1,7 +1,7 @@
 env: staging
 project_name: whisper-stt-service
 prefix: "{{ input_prefix}}"
-namespace: catalog
+namespace: development
 fqdn: "{{ prefix }}-{{ project_name }}.dev.pharmeasy.net"
 tag: "{{ prefix }}-{{ build_number }}"
 context: development
