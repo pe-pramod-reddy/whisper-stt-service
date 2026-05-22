@@ -1,0 +1,34 @@
+env: loadtest
+prefix: "{{ nodename }}"
+project_name: whisper-stt-service
+nodename: "{{ nodename }}"
+namespace: catalog
+fqdn: "{{ nodename }}-{{ project_name }}.dev.pharmeasy.in"
+tag: "{{ nodename }}-{{ build_number }}"
+configmap:
+  APP_ENV: "development"
+  WHISPER__MODEL: "Systran/faster-whisper-small"
+  WHISPER__INFERENCE_DEVICE: "cpu"
+  WHISPER__COMPUTE_TYPE: "int8"
+  ENABLE_UI: "false"
+  UVICORN_HOST: "0.0.0.0"
+  UVICORN_PORT: "8000"
+  SERVER_SERVICENAME: "{{ project_name }}"
+  DD_SERVICE: "{{ project_name }}"
+  DD_ENV: "{{ env }}"
+config:
+  identifier: "{{ project_name }}-{{ nodename }}"
+  name: "pe-mum-{{ env }}-{{ project_name }}-{{ nodename }}"
+  fqdn: "{{ nodename }}-{{ project_name }}.dev.pharmeasy.in"
+  min_replicas: 4
+  max_replicas: 10
+  persistent_model_cache: false
+  resources:
+    limits:
+      cpu: "2000m"
+      memory: "3Gi"
+    requests:
+      cpu: "1000m"
+      memory: "2Gi"
+  canary:
+    steps: []

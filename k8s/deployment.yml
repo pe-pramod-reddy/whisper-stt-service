@@ -1,0 +1,191 @@
+{% if configmap is defined %}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ config.identifier }}
+  namespace: {{ namespace }}
+data:
+{% for key, value in configmap.items() %}
+  {{ key }}: "{{ value }}"
+{% endfor %}
+{% endif %}
+{% if config.persistent_model_cache | default(false) %}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ config.identifier }}-model-cache
+  namespace: {{ namespace }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ config.model_cache_size | default('10Gi') }}
+{% endif %}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ config.identifier }}
+  namespace: {{ namespace }}
+  labels:
+    k8s-svc: {{ config.identifier }}
+spec:
+  selector:
+    k8s-app: {{ config.identifier }}
+  ports:
+    - protocol: TCP
+      port: 8000
+      targetPort: 8000
+      name: http
+  type: ClusterIP
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: {{ config.identifier }}-rollout
+  namespace: {{ namespace }}
+  labels:
+    k8s-app: {{ config.identifier }}
+spec:
+  progressDeadlineSeconds: 600
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels:
+      k8s-app: {{ config.identifier }}
+  strategy:
+    canary:
+      steps:
+        {{ config.canary.steps | to_nice_yaml(indent=0) | indent(8) }}
+  template:
+    metadata:
+      labels:
+        k8s-app: {{ config.identifier }}
+        tags.datadoghq.com/env: "{{ configmap.DD_ENV }}"
+        tags.datadoghq.com/service: "{{ configmap.DD_SERVICE }}"
+        tags.datadoghq.com/version: "{{ tag }}"
+    spec:
+      terminationGracePeriodSeconds: 60
+{% if env != 'production' and env != 'preprod' %}
+      imagePullSecrets:
+      - name: ecr-secret
+{% endif %}
+      containers:
+        - name: {{ config.identifier }}
+          image: "127603365779.dkr.ecr.ap-south-1.amazonaws.com/{{ project_name }}:{{ tag }}"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+              name: http
+          # Whisper model loads on first request. Generous startup probe.
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 30
+          readinessProbe:
+            httpGet:
+              path: /v1/models
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+            successThreshold: 1
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 5
+          envFrom:
+          - configMapRef:
+              name: {{ config.identifier }}
+{% if config.secret is defined %}
+          - secretRef:
+              name: {{ config.secret }}
+{% endif %}
+          env:
+            - name: DD_AGENT_HOST
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+          resources:
+            requests:
+              memory: {{ config.resources.requests.memory }}
+              cpu: {{ config.resources.requests.cpu }}
+            limits:
+              memory: {{ config.resources.limits.memory }}
+              cpu: {{ config.resources.limits.cpu }}
+{% if config.persistent_model_cache | default(false) %}
+          volumeMounts:
+            - name: model-cache
+              mountPath: /root/.cache/huggingface
+{% endif %}
+{% if config.persistent_model_cache | default(false) %}
+      volumes:
+        - name: model-cache
+          persistentVolumeClaim:
+            claimName: {{ config.identifier }}-model-cache
+{% endif %}
+{% if env == 'production' or env == 'preprod' %}
+      nodeSelector:
+        workloadType: {{ workload_type }}
+      tolerations:
+        - key: "datadog-taint"
+          operator: "Exists"
+          effect: "NoSchedule"
+{% endif %}
+---
+apiVersion: getambassador.io/v2
+kind: Mapping
+metadata:
+  name: {{ config.identifier }}
+  namespace: {{ namespace }}
+spec:
+  bypass_auth: true
+  host: {{ config.fqdn }}
+  prefix: /
+  service: {{ config.identifier }}.{{ namespace }}:8000
+  # Speech-to-text requests can be large (audio uploads) and slow on CPU.
+  timeout_ms: 60000
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ config.identifier }}-hpa-rollout
+  namespace: {{ namespace }}
+spec:
+  scaleTargetRef:
+    apiVersion: argoproj.io/v1alpha1
+    kind: Rollout
+    name: {{ config.identifier }}-rollout
+  minReplicas: {{ config.min_replicas }}
+  maxReplicas: {{ config.max_replicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          averageUtilization: 70
+          type: Utilization
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          averageUtilization: 75
+          type: Utilization
+  behavior:
+    scaleDown:
+      policies:
+        - type: Percent
+          value: 20
+          periodSeconds: 300
+      selectPolicy: Min

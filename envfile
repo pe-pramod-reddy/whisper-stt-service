@@ -1,0 +1,8 @@
+#APP Name
+APP_NAME := whisper-stt-service
+#VERSION
+VERSION := 0.0.1
+#Default Whisper model baked into the image
+WHISPER_MODEL := Systran/faster-whisper-small
+#Build platform (k8s nodes are amd64)
+PLATFORM := linux/amd64

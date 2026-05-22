@@ -1,0 +1,51 @@
+env: production
+project_name: whisper-stt-service
+namespace: catalog
+fqdn: "{{ project_name }}.internal.pharmeasy.in"
+tag: "{{ prefix }}-{{ build_number }}"
+context: production
+env_during_build: True
+aws_profile: default
+min_replicas: 2
+max_replicas: 6
+profile: default
+workload_type: "general"
+configmap:
+  APP_ENV: "production"
+  WHISPER__MODEL: "Systran/faster-whisper-small"
+  WHISPER__INFERENCE_DEVICE: "cpu"
+  WHISPER__COMPUTE_TYPE: "int8"
+  ENABLE_UI: "false"
+  UVICORN_HOST: "0.0.0.0"
+  UVICORN_PORT: "8000"
+  SERVER_SERVICENAME: "{{ project_name }}"
+  DD_SERVICE: "{{ project_name }}"
+  DD_ENV: "{{ env }}"
+  DD_TRACE_ENABLED: "true"
+  DD_TRACE_SAMPLE_RATE: "0.1"
+config:
+  identifier: "{{ project_name }}-{{ prefix }}"
+  fqdn: "{{ project_name }}.internal.pharmeasy.in"
+  min_replicas: 2
+  max_replicas: 6
+  persistent_model_cache: true
+  model_cache_size: "20Gi"
+  resources:
+    limits:
+      cpu: "4000m"
+      memory: "6Gi"
+    requests:
+      cpu: "1500m"
+      memory: "3Gi"
+  canary:
+    steps:
+      - setWeight: 10
+      - pause:
+          duration: 300s
+      - setWeight: 25
+      - pause:
+          duration: 120s
+      - setWeight: 50
+      - pause:
+          duration: 60s
+      - setWeight: 100

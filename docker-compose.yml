@@ -1,0 +1,35 @@
+# =============================================================================
+# Local development on Apple Silicon (arm64).
+#
+# Uses the upstream arm64 image directly — bypasses the amd64-targeted
+# Dockerfile in this repo. The custom Dockerfile is meant for k8s/CI builds.
+#
+# Start:   docker compose up -d   (or: podman compose up -d)
+# Test:    curl -X POST http://localhost:8000/v1/audio/transcriptions \
+#            -F file=@/tmp/hello.wav \
+#            -F model=Systran/faster-whisper-small
+# =============================================================================
+
+services:
+  whisper-stt:
+    image: docker.io/fedirz/faster-whisper-server:latest-cpu
+    container_name: whisper-stt
+    ports:
+      - "8000:8000"
+    environment:
+      WHISPER__MODEL: Systran/faster-whisper-small
+      WHISPER__INFERENCE_DEVICE: cpu
+      WHISPER__COMPUTE_TYPE: int8
+      ENABLE_UI: "true"
+    volumes:
+      - whisper-cache:/root/.cache/huggingface
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 120s
+      retries: 3
+
+volumes:
+  whisper-cache:

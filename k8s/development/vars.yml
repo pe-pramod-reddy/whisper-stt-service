@@ -1,0 +1,39 @@
+env: staging
+project_name: whisper-stt-service
+prefix: "{{ nodename }}"
+namespace: catalog
+fqdn: "{{ prefix }}-{{ project_name }}.dev.pharmeasy.net"
+tag: "{{ prefix }}-{{ build_number }}"
+context: development
+env_during_build: True
+aws_profile: default
+min_replicas: 1
+max_replicas: 2
+profile: default
+workload_type: "general"
+configmap:
+  APP_ENV: "staging"
+  WHISPER__MODEL: "Systran/faster-whisper-small"
+  WHISPER__INFERENCE_DEVICE: "cpu"
+  WHISPER__COMPUTE_TYPE: "int8"
+  ENABLE_UI: "false"
+  UVICORN_HOST: "0.0.0.0"
+  UVICORN_PORT: "8000"
+  SERVER_SERVICENAME: "WhisperSttServiceStage"
+  DD_SERVICE: "{{ project_name }}"
+  DD_ENV: "{{ env }}"
+config:
+  identifier: "{{ project_name }}-{{ prefix }}"
+  fqdn: "{{ prefix }}-{{ project_name }}.dev.pharmeasy.net"
+  min_replicas: 1
+  max_replicas: 2
+  persistent_model_cache: false
+  resources:
+    limits:
+      cpu: "2000m"
+      memory: "3Gi"
+    requests:
+      cpu: "500m"
+      memory: "1500Mi"
+  canary:
+    steps: []
