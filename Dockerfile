@@ -12,17 +12,20 @@
 ARG BASE_IMAGE=docker.io/fedirz/faster-whisper-server:latest-cpu
 ARG WHISPER_MODEL=Systran/faster-whisper-small
 
+# Upstream image ships its Python deps inside a venv (not on system python3),
+# so we call huggingface-cli from that venv.
+ARG VENV_BIN=/root/faster-whisper-server/.venv/bin
+
 # ---- stage 1: pre-download the model into HF cache --------------------------
 FROM ${BASE_IMAGE} AS modelcache
 ARG WHISPER_MODEL
-ENV HF_HOME=/opt/hf-cache
+ARG VENV_BIN
+ENV HF_HOME=/opt/hf-cache \
+    HF_HUB_DISABLE_TELEMETRY=1
 RUN mkdir -p /opt/hf-cache && \
-    python3 -c "from huggingface_hub import snapshot_download; \
-import os; \
-snapshot_download(repo_id=os.environ['WHISPER_MODEL'], \
-                  local_dir_use_symlinks=False, \
-                  cache_dir=os.environ['HF_HOME'])" \
-    WHISPER_MODEL=${WHISPER_MODEL}
+    ${VENV_BIN}/huggingface-cli download "${WHISPER_MODEL}" \
+        --cache-dir /opt/hf-cache \
+        --quiet
 
 # ---- stage 2: final runtime image -------------------------------------------
 FROM ${BASE_IMAGE}
@@ -30,7 +33,7 @@ ARG WHISPER_MODEL
 
 LABEL org.opencontainers.image.title="whisper-stt-service" \
       org.opencontainers.image.description="Self-hosted Whisper speech-to-text (OpenAI-compatible API)" \
-      org.opencontainers.image.source="https://github.com/pharmeasy/whisper-stt-service"
+      org.opencontainers.image.source="https://github.com/pe-pramod-reddy/whisper-stt-service"
 
 # Bake the cached model into the final image
 COPY --from=modelcache /opt/hf-cache /root/.cache/huggingface
@@ -41,7 +44,8 @@ ENV WHISPER__MODEL=${WHISPER_MODEL} \
     WHISPER__COMPUTE_TYPE=int8 \
     ENABLE_UI=false \
     UVICORN_HOST=0.0.0.0 \
-    UVICORN_PORT=8000
+    UVICORN_PORT=8000 \
+    HF_HUB_DISABLE_TELEMETRY=1
 
 EXPOSE 8000
 
