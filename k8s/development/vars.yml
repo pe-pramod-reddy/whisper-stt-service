@@ -6,10 +6,10 @@ fqdn: "{{ prefix }}-{{ project_name }}.dev.pharmeasy.net"
 tag: "{{ prefix }}-{{ build_number }}"
 context: development
 env_during_build: True
-aws_profile: default
+aws_profile: consumer
 min_replicas: 1
 max_replicas: 2
-profile: default
+profile: consumer
 workload_type: "general"
 configmap:
   APP_ENV: "staging"
